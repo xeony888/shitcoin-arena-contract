@@ -10,9 +10,9 @@ const FEE_LAMPORTS: u64 = LAMPORTS_PER_SOL / 10;
 const FEE_PERCENT_BP: u64 = 1;
 const TOKEN_SUPPLY: u64 = 1000000000 * 10_u64.pow(6);
  // adjusts expressions so that 20% of the supply will be in circulation when the mkt cap is 420 sol
-const DENOMINATOR_C: u64 = 21 * 10_u64.pow(17);
+const DENOMINATOR_C: u128 = 345 * 10_u128.pow(16);
 const ADMIN: &str = "";
-const TARGET_MARKET_CAP: u64 = 690 * LAMPORTS_PER_SOL;
+const TARGET_TOKENS: u64 = TOKEN_SUPPLY / 2;
 #[program]
 pub mod shitcoin_arena {
     use super::*;
@@ -133,7 +133,7 @@ pub mod shitcoin_arena {
             ),
             amount
         )?;
-        if ctx.accounts.bonding_curve.mkt_cap() >= TARGET_MARKET_CAP {
+        if ctx.accounts.bonding_curve.token >= TARGET_TOKENS {
             ctx.accounts.bonding_curve.closed = true;
             emit!(InitializeMigrateEvent {
                 mint: ctx.accounts.mint.key()
@@ -187,8 +187,8 @@ pub mod shitcoin_arena {
             ),
             sell_fee + buy_fee,
         )?;
-        **ctx.accounts.from_curve_sol_account.try_borrow_mut_lamports()? -= sell_amount;
-        **ctx.accounts.signer.try_borrow_mut_lamports()? += sell_amount;
+        **ctx.accounts.from_curve_sol_account.try_borrow_mut_lamports()? -= sell_lamports;
+        **ctx.accounts.signer.try_borrow_mut_lamports()? += sell_lamports;
         anchor_lang::system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
@@ -220,7 +220,7 @@ pub mod shitcoin_arena {
                 },
                 &[&[b"auth", &[ctx.bumps.program_authority]]]
             ),
-            sell_amount
+            buy_amount,
         )?;
         Ok(())
     }
@@ -283,23 +283,20 @@ impl LinearBondingCurve {
         // if you buy token_amount tokens, return the amount of lamports you will need
        let result = self.discrete_integral(self.token, self.token + token_amount);
         self.token += token_amount;
-        return (result / DENOMINATOR_C) + 1;
+        return (((result / DENOMINATOR_C) + 1) as u64).try_into().unwrap();
     }
     pub fn sell(&mut self, token_amount: u64) -> u64 {
         // if you sell token_amount tokens, return the amount of lamports you get
         let result = self.discrete_integral(self.token - token_amount, self.token);
         self.token -= token_amount;
-        return (result / DENOMINATOR_C) + 1;
+        return (((result / DENOMINATOR_C) + 1) as u64).try_into().unwrap();
     }
-    fn discrete_integral(&self, a: u64, b: u64) -> u64 {
+    fn discrete_integral(&self, a: u64, b: u64) -> u128 {
         let temp = b + 1 - a;
         let times = temp / 2;
         let sum = a + b;
         let bit = (temp % 2) * sum / 2;
-        return times * sum + bit;
-    }
-    pub fn mkt_cap(&self) -> u64 {
-        return self.token / DENOMINATOR_C * TOKEN_SUPPLY
+        return times as u128 * sum as u128 + bit as u128;
     }
 }
 #[derive(Accounts)]
@@ -376,6 +373,7 @@ pub struct CreateTokenAndBuy<'info> {
         seeds = [b"sol"],
         bump
     )]
+    /// CHECK: 
     pub program_sol_account: AccountInfo<'info>,
     #[account(
         seeds = [b"auth"],
@@ -425,6 +423,7 @@ pub struct Buy<'info> {
         seeds = [b"sol"],
         bump
     )]
+    /// CHECK: 
     pub program_sol_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>
@@ -481,13 +480,14 @@ pub struct Swap<'info> {
         seeds = [b"auth"],
         bump
     )]
-    // CHECK: 
+    /// CHECK: 
     pub program_authority: AccountInfo<'info>,
     #[account(
         mut,
         seeds = [b"sol"],
         bump
     )]
+    /// CHECK: 
     pub program_sol_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
@@ -530,6 +530,7 @@ pub struct Sell<'info> {
         seeds = [b"sol"],
         bump
     )]
+    /// CHECK: 
     pub program_sol_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>
