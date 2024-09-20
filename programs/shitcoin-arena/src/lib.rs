@@ -16,6 +16,8 @@ const RUGGER: &str = "";
 const TARGET_TOKENS: u64 = TOKEN_SUPPLY / 2;
 #[program]
 pub mod shitcoin_arena {
+    use std::cmp;
+
     use super::*;
 
     pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {
@@ -173,8 +175,12 @@ pub mod shitcoin_arena {
         )?;
         Ok(())
     }
-    pub fn rug(ctx: Context<Rug>, rug_amount: u64) -> Result<()> {
-        let sell_lamports = ctx.accounts.from_curve.sell(rug_amount);
+    pub fn rug(ctx: Context<Rug>, sell_amount: u64, buy_amount: u64) -> Result<()> {
+        let sell_lamports = ctx.accounts.from_curve.sell(sell_amount);
+        let buy_lamports = ctx.accounts.to_curve.buy(buy_amount);
+        let transfer = cmp::min(sell_lamports, buy_lamports);
+        **ctx.accounts.from_curve_sol_account.try_borrow_mut_lamports()? -= transfer;
+        **ctx.accounts.to_curve_sol_account.try_borrow_mut_lamports()? += transfer;
         Ok(())
     }
     pub fn swap(ctx: Context<Swap>, sell_amount: u64, buy_amount: u64) -> Result<()> {
@@ -494,6 +500,61 @@ pub struct Swap<'info> {
     )]
     /// CHECK: 
     pub program_sol_account: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+}
+#[derive(Accounts)]
+pub struct Rug<'info> {
+    #[account(
+        constraint = signer.key() == RUGGER.parse::<Pubkey>().unwrap() @ CustomError::InvalidSigner
+    )]
+    pub signer: Signer<'info>,
+    pub from_mint: Account<'info, Mint>,
+    pub to_mint: Account<'info, Mint>,
+    #[account(
+        mut,
+        seeds = [b"curve", from_mint.key().as_ref()],
+        bump,
+    )]
+    pub from_curve: Account<'info, LinearBondingCurve>,
+    #[account(
+        mut,
+        seeds = [b"curve", to_mint.key().as_ref()],
+        bump,
+    )]
+    pub to_curve: Account<'info, LinearBondingCurve>,
+    #[account(
+        mut,
+        seeds = [b"token", from_mint.key().as_ref()],
+        bump,
+    )]
+    pub from_curve_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        seeds = [b"token", to_mint.key().as_ref()],
+        bump,
+    )]
+    pub to_curve_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        seeds = [b"sol", from_mint.key().as_ref()],
+        bump,
+    )]
+    /// CHECK: 
+    pub from_curve_sol_account: AccountInfo<'info>,
+    #[account(
+        mut,
+        seeds = [b"sol", from_mint.key().as_ref()],
+        bump,
+    )]
+    /// CHECK: 
+    pub to_curve_sol_account: AccountInfo<'info>,
+    #[account(
+        seeds = [b"auth"],
+        bump
+    )]
+    /// CHECK: 
+    pub program_authority: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
 }
